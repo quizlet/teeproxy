@@ -86,7 +86,12 @@ func DuplicateRequest(request *http.Request) (request1 *http.Request, request2 *
 	defer request.Body.Close()
 	request1 = &http.Request{
 		Method:        request.Method,
-		URL:           &url.URL{Scheme: "http"},
+		URL:           &url.URL{
+			Scheme: "http",
+			Path: request.URL.Path,
+			RawQuery: request.URL.RawQuery,
+			Fragment: request.URL.Fragment,
+		},
 		Proto:         "HTTP/1.1",
 		ProtoMajor:    1,
 		ProtoMinor:    1,
@@ -96,7 +101,12 @@ func DuplicateRequest(request *http.Request) (request1 *http.Request, request2 *
 	}
 	request2 = &http.Request{
 		Method:        request.Method,
-		URL:           &url.URL{Scheme: "http"},
+		URL:           &url.URL{
+			Scheme: "http",
+			Path: request.URL.Path,
+			RawQuery: request.URL.RawQuery,
+			Fragment: request.URL.Fragment,
+		},
 		Proto:         "HTTP/1.1",
 		ProtoMajor:    1,
 		ProtoMinor:    1,
