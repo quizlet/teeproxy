@@ -7,9 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httputil"
+	"net/url"
 	"runtime"
-	"time"
 )
 
 var (
@@ -32,11 +31,15 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				fmt.Println("Recovered in f", r)
 			}
 		}()
-		client_tcp_conn, _ := net.DialTimeout("tcp", h.Alternative, time.Duration(1*time.Second)) // Open new TCP connection to the server
-		client_http_conn := httputil.NewClientConn(client_tcp_conn, nil)                          // Start a new HTTP connection on it
-		client_http_conn.Write(req1)                                                              // Pass on the request
-		client_http_conn.Read(req1)                                                               // Read back the reply
-		client_http_conn.Close()                                                                  // Close the connection to the server
+
+		client1 := &http.Client{}
+		req1.URL.Host = h.Alternative
+		req1.URL.Scheme = "http"
+		_, err := client1.Do(req1)
+
+		if err != nil {
+			fmt.Printf("%s\n", err)
+		}
 	}()
 	defer func() {
 		if r := recover(); r != nil && *debug {
@@ -44,12 +47,17 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
-	client_tcp_conn, _ := net.DialTimeout("tcp", h.Target, time.Duration(3*time.Second)) // Open new TCP connection to the server
-	client_http_conn := httputil.NewClientConn(client_tcp_conn, nil)                     // Start a new HTTP connection on it
-	client_http_conn.Write(req2)                                                         // Pass on the request
-	resp, _ := client_http_conn.Read(req2)                                               // Read back the reply
-	resp.Write(w)                                                                        // Write the reply to the original connection
-	client_http_conn.Close()                                                             // Close the connection to the server
+	client2 := &http.Client{}
+	req2.URL.Host = h.Target
+	req2.URL.Scheme = "http"
+	resp, err := client2.Do(req2)
+
+	if err != nil {
+		fmt.Printf("%s\n", err)
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func main() {
@@ -78,24 +86,22 @@ func DuplicateRequest(request *http.Request) (request1 *http.Request, request2 *
 	defer request.Body.Close()
 	request1 = &http.Request{
 		Method:        request.Method,
-		URL:           request.URL,
+		URL:           &url.URL{Scheme: "http"},
 		Proto:         "HTTP/1.1",
 		ProtoMajor:    1,
 		ProtoMinor:    1,
 		Header:        request.Header,
 		Body:          nopCloser{b1},
-		Host:          request.Host,
 		ContentLength: request.ContentLength,
 	}
 	request2 = &http.Request{
 		Method:        request.Method,
-		URL:           request.URL,
+		URL:           &url.URL{Scheme: "http"},
 		Proto:         "HTTP/1.1",
 		ProtoMajor:    1,
 		ProtoMinor:    1,
 		Header:        request.Header,
 		Body:          nopCloser{b2},
-		Host:          request.Host,
 		ContentLength: request.ContentLength,
 	}
 	return
