@@ -15,7 +15,6 @@ var (
 	listen           = flag.String("l", ":8888", "port to accept requests")
 	targetProduction = flag.String("a", "localhost:8080", "Where production traffic goes. http://localhost:8080/production")
 	altTarget        = flag.String("b", "localhost:8081", "Where testing traffic goes. Responses are ignored. http://localhost:8081/test")
-	debug            = flag.Bool("debug", false, "more logging, showing ignored output")
 )
 
 type handler struct {
@@ -24,13 +23,16 @@ type handler struct {
 }
 
 func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+  if w == nil || req == nil || req.Body == nil {
+    return
+  }
+
 	req1, req2 := DuplicateRequest(req)
-	req.Body.Close()
 
 	go func() {
 		defer func() {
-			if r := recover(); r != nil && *debug {
-				fmt.Println("Recovered in f", r)
+			if r := recover(); r != nil {
+				fmt.Println("Recovered in alternative; ", r)
 			}
 		}()
 
@@ -39,7 +41,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		req1.URL.Scheme = "http"
 		resp, err := client1.Do(req1)
     req1.Body.Close()
-    resp.Body.Close()
+
+    if resp != nil && resp.Body != nil {
+      resp.Body.Close()
+    }
 
 		if err != nil {
 			fmt.Printf("%s\n", err)
@@ -47,8 +52,8 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}()
 
 	defer func() {
-		if r := recover(); r != nil && *debug {
-			fmt.Println("Recovered in f", r)
+		if r := recover(); r != nil {
+			fmt.Println("Recovered in target; ", r)
 		}
 	}()
 
@@ -64,8 +69,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
   req2.Body.Close()
-  resp.Body.Close()
-  w.Close()
+
+  if resp != nil && resp.Body != nil {
+    resp.Body.Close()
+  }
 }
 
 func main() {

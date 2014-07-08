@@ -8,6 +8,8 @@ import (
   "net/http"
   "os/exec"
   "time"
+  "io"
+  "io/ioutil"
 )
 
 func answer200(port int) {
@@ -26,7 +28,8 @@ func TestMemoryUse(t *testing.T) {
 
   go func(c chan int) {
     cmd := exec.Command("./teeproxy", "-l", ":8092", "-a", "localhost:8091", "-b", "localhost:8090")
-    //stdout := cmd.StdoutPipe()
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
     err := cmd.Start()
     if err != nil {
       fmt.Fprintf(os.Stderr, "error starting teeproxy: %s\n", err)
@@ -34,7 +37,6 @@ func TestMemoryUse(t *testing.T) {
 
     <-c
 
-    //cmd2 := fmt.Sprintf("/bin/ps -e -opid=,rss=,pmem= | /usr/bin/grep %d", cmd.Process.Pid)
     cmd2 := fmt.Sprintf("/bin/ps -e -opid=,rss=,pmem=,args= | /usr/bin/grep './teeproxy'")
     str, err := exec.Command("/bin/sh", "-c", cmd2).Output()
     if err != nil {
@@ -48,14 +50,21 @@ func TestMemoryUse(t *testing.T) {
   time.Sleep(2 * time.Second)
 
   for i := 0; i < 10000; i++ {
-    _, err := http.Get("http://0.0.0.0:8092/")
+    resp, err := http.Get("http://0.0.0.0:8092/")
 
     if err != nil {
       fmt.Fprintf(os.Stderr, "error %d: %s\n", i, err)
+      continue
+    }
+
+    if resp != nil && resp.Body != nil {
+      io.Copy(ioutil.Discard, resp.Body)
+      resp.Body.Close()
     }
   }
 
   c <- 1
+  close(c)
   time.Sleep(1 * time.Second)
 }
 
