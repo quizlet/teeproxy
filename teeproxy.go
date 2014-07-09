@@ -40,13 +40,13 @@ func ServeHTTP(w http.ResponseWriter, req *http.Request) {
     resp, err := httpclient.Do(req1)
     req1.Body.Close()
 
+    if err != nil {
+      fmt.Printf("alt: %s\n", err)
+    }
+
     if resp != nil && resp.Body != nil {
       io.Copy(ioutil.Discard, resp.Body)  // this copy is necessary for keepalives
       resp.Body.Close()
-    }
-
-    if err != nil {
-      fmt.Printf("alt: %s\n", err)
     }
   }()
 
@@ -59,16 +59,15 @@ func ServeHTTP(w http.ResponseWriter, req *http.Request) {
   req2.URL.Host = *targetProduction
   req2.URL.Scheme = "http"
   resp, err := httpclient.Do(req2)
+  req2.Body.Close()
 
   if err != nil {
     fmt.Printf("primary: %s\n", err)
   }
 
-  w.WriteHeader(resp.StatusCode)
-  io.Copy(w, resp.Body)
-  req2.Body.Close()
-
   if resp != nil && resp.Body != nil {
+    w.WriteHeader(resp.StatusCode)
+    io.Copy(w, resp.Body)
     resp.Body.Close()
   }
 }
