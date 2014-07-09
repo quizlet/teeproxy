@@ -5,10 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
+  "io/ioutil"
 	"net/http"
 	"net/url"
 	"runtime"
+  "time"
+  "log"
 )
 
 var (
@@ -17,12 +19,9 @@ var (
 	altTarget        = flag.String("b", "localhost:8081", "Where testing traffic goes. Responses are ignored. http://localhost:8081/test")
 )
 
-type handler struct {
-	Target      string
-	Alternative string
-}
+var httpclient *http.Client = &http.Client{}
 
-func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func ServeHTTP(w http.ResponseWriter, req *http.Request) {
   if w == nil || req == nil || req.Body == nil {
     return
   }
@@ -36,18 +35,18 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}()
 
-		client1 := &http.Client{}
-		req1.URL.Host = h.Alternative
+		req1.URL.Host = *altTarget
 		req1.URL.Scheme = "http"
-		resp, err := client1.Do(req1)
+		resp, err := httpclient.Do(req1)
     req1.Body.Close()
 
     if resp != nil && resp.Body != nil {
+      io.Copy(ioutil.Discard, resp.Body)  // this copy is necessary for keepalives
       resp.Body.Close()
     }
 
 		if err != nil {
-			fmt.Printf("%s\n", err)
+			fmt.Printf("alt: %s\n", err)
 		}
 	}()
 
@@ -57,13 +56,12 @@ func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
-	client2 := &http.Client{}
-	req2.URL.Host = h.Target
+	req2.URL.Host = *targetProduction
 	req2.URL.Scheme = "http"
-	resp, err := client2.Do(req2)
+	resp, err := httpclient.Do(req2)
 
 	if err != nil {
-		fmt.Printf("%s\n", err)
+		fmt.Printf("primary: %s\n", err)
 	}
 
 	w.WriteHeader(resp.StatusCode)
@@ -79,12 +77,14 @@ func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	local, _ := net.Listen("tcp", *listen)
-	h := handler{
-		Target:      *targetProduction,
-		Alternative: *altTarget,
-	}
-	http.Serve(local, h)
+  http.HandleFunc("/", ServeHTTP)
+
+  s := &http.Server{
+    Addr:           *listen,
+    ReadTimeout:    5 * time.Second,
+    WriteTimeout:   5 * time.Second,
+  }
+  log.Fatal(s.ListenAndServe())
 }
 
 type nopCloser struct {

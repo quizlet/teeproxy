@@ -33,6 +33,7 @@ func TestMemoryUse(t *testing.T) {
     err := cmd.Start()
     if err != nil {
       fmt.Fprintf(os.Stderr, "error starting teeproxy: %s\n", err)
+      return
     }
 
     <-c
@@ -48,13 +49,13 @@ func TestMemoryUse(t *testing.T) {
   }(c)
 
   time.Sleep(2 * time.Second)
+  client := &http.Client{}
 
-  for i := 0; i < 10000; i++ {
-    resp, err := http.Get("http://0.0.0.0:8092/")
+  for i := 0; i < 100000; i++ {
+    resp, err := client.Get("http://0.0.0.0:8092/")
 
     if err != nil {
       fmt.Fprintf(os.Stderr, "error %d: %s\n", i, err)
-      continue
     }
 
     if resp != nil && resp.Body != nil {
